@@ -1,0 +1,17 @@
+name: Cypress Tests
+
+on: [push]
+
+jobs:
+  cypress-run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: npm install cypress --save-dev
+
+      - name: Run Cypress tests
+        run: npx cypress run --spec "tests/frontend/cypress/e2e/spec.cy.js" 
