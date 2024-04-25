@@ -12,6 +12,9 @@ jobs:
 
       - name: Install dependencies
         run: npm install cypress --save-dev
+        
+      - name: Change directory to tests
+        run: cd tests/frontend
 
       - name: Run Cypress tests
-        run: npx cypress run --spec "tests/frontend/cypress/e2e/spec.cy.js" 
+        run: npx cypress run --spec "cypress/e2e/spec.cy.js" 
