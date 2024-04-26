@@ -2,6 +2,10 @@ name: Terraform Workflow
 
 on:
   push:
+    branches:
+    - main
+    paths:
+    - 'infrastructure/**'
 
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
