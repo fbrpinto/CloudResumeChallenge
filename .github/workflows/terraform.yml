@@ -24,14 +24,6 @@ jobs:
           echo "bucket_name = \"${{ vars.BUCKET_NAME }}\"" >> terraform.auto.tfvars
           echo "certificate_arn = \"${{ secrets.CERTIFICATE_ARN }}\"" >> terraform.auto.tfvars
           echo "hosted_zone_id = \"${{ secrets.HOSTED_ZONE_ID }}\"" >> terraform.auto.tfvars
-          
-          echo "aws_region = \"${{ vars.AWS_REGION }}\""
-          echo "bucket_name = \"${{ vars.BUCKET_NAME }}\""
-          echo "certificate_arn = \"${{ secrets.CERTIFICATE_ARN }}\""
-          echo "hosted_zone_id = \"${{ secrets.HOSTED_ZONE_ID }}\""
-        env:
-          CERTIFICATE_ARN: ${{ secrets.CERTIFICATE_ARN }}
-          HOSTED_ZONE_ID: ${{ secrets.HOSTED_ZONE_ID }}
         
 
       - name: Terraform Init
