@@ -31,20 +31,28 @@ window.addEventListener("DOMContentLoaded", (event) => {
   });
 });
 
+
 // Wait for the document to be fully loaded
 document.addEventListener("DOMContentLoaded", function () {
   // Get a reference to the <h1> element by its id
   // const visitors_count = document.getElementById('visitors-count');
 
-  // Options for the fetch request
-  const options = {
+  // Data to be sent in the request body
+  const data = {};
+
+  // Configuring the fetch request
+  const requestOptions = {
     method: "POST",
     headers: {
-      "Content-Type": "application/json", // Specify content type if sending JSON data
-    }
+      "Content-Type": "application/json", // Specify content type as JSON
+    },
+    body: JSON.stringify(data), // Convert data to JSON string
   };
 
-  fetch("https://x58exz4g03.execute-api.eu-west-1.amazonaws.com/dev/visitors", options)
+  fetch(
+    "https://x58exz4g03.execute-api.eu-west-1.amazonaws.com/dev/visitors",
+    requestOptions
+  )
     .then((response) => {
       if (!response.ok) {
         throw new Error("Network response was not ok");
