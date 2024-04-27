@@ -26,11 +26,17 @@ def lambda_handler(event, context):
         )
         return {
             'statusCode': 200,
-            'body': json.dumps('DynamoDB updated successfully')
+            'body': json.dumps({'visitors': int(num_visitors)}),
+            'headers': {
+                'Content-Type': 'application/json',
+            },
         }
     except Exception as e:
         print('Error updating DynamoDB:', e)
         return {
             'statusCode': 500,
-            'body': json.dumps('Error updating DynamoDB')
+            'body': json.dumps({'message': 'Invalid Request'}),
+            'headers': {
+                'Content-Type': 'application/json',
+            },
         }

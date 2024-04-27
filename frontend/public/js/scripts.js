@@ -35,7 +35,9 @@ window.addEventListener("DOMContentLoaded", (event) => {
 // Wait for the document to be fully loaded
 document.addEventListener("DOMContentLoaded", function () {
   // Get a reference to the <h1> element by its id
-  // const visitors_count = document.getElementById('visitors-count');
+  const visitors_count = document.getElementById('visitors-count');
+
+  const requestUrl = "https://40a3urec8l.execute-api.eu-west-1.amazonaws.com/dev/visitors"
 
   // Data to be sent in the request body
   const data = {};
@@ -44,13 +46,13 @@ document.addEventListener("DOMContentLoaded", function () {
   const requestOptions = {
     method: "POST",
     headers: {
-      "Content-Type": "application/json", // Specify content type as JSON
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify(data), // Convert data to JSON string
+    body: JSON.stringify(data),
   };
 
   fetch(
-    "https://x58exz4g03.execute-api.eu-west-1.amazonaws.com/dev/visitors",
+    requestUrl,
     requestOptions
   )
     .then((response) => {
@@ -59,11 +61,10 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       return response.json();
     })
-    // .then(data => {
-    //     // console.log(data.visitors);
-    //     // visitors_count.textContent += data.visitors.toString();
-    //     console.log(data);
-    // })
+    .then(data => {
+        console.log(data.visitors);
+        visitors_count.textContent += data.visitors.toString();
+    })
     .catch((error) => {
       console.error("Fetch error:", error);
     });
