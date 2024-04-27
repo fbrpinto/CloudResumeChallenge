@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Get a reference to the <h1> element by its id
     const visitors_count = document.getElementById('visitors-count');
 
-    fetch('https://x58exz4g03.execute-api.eu-west-1.amazonaws.com/dev')
+    post('https://x58exz4g03.execute-api.eu-west-1.amazonaws.com/dev/visitors')
     .then(response => {
         if (!response.ok) {
         throw new Error('Network response was not ok');
