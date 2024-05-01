@@ -34,7 +34,7 @@ window.addEventListener("DOMContentLoaded", (event) => {
 
 // Wait for the document to be fully loaded
 document.addEventListener("DOMContentLoaded", function () {
-  // Get a reference to the <h1> element by its id
+  // Get a reference to the element by its id
   const visitors_count = document.getElementById('visitors-count');
 
   const requestUrl = "https://40a3urec8l.execute-api.eu-west-1.amazonaws.com/dev/visitors"
