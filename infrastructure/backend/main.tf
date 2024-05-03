@@ -3,6 +3,7 @@ provider "aws" {
   region = "eu-west-1"
 }
 
+
 # ----------------------------------- DynamoDB Table ----------------------------------- #
 # Create DynamoDB table
 resource "aws_dynamodb_table" "visitors" {
@@ -98,6 +99,24 @@ resource "aws_acm_certificate" "api_certificate" {
   validation_method = "DNS"
 }
 
+# Create the CNAME record for the custom domain name
+resource "aws_route53_record" "cname" {
+  for_each = {
+    for dvo in aws_acm_certificate.api_certificate.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = false
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 300
+  type            = each.value.type
+  zone_id         = var.hosted_zone_id
+}
+
 # Validate the certificate for the custom domain name
 resource "aws_acm_certificate_validation" "api_validation" {
   certificate_arn = aws_acm_certificate.api_certificate.arn
@@ -126,8 +145,6 @@ resource "aws_apigatewayv2_domain_name" "domain" {
     security_policy = "TLS_1_2"
   }
 }
-
-
 
 # Map the custom domain to the API
 resource "aws_apigatewayv2_api_mapping" "mapping" {

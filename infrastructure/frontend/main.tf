@@ -11,7 +11,7 @@ provider "aws" {
 # ------------------------------------- S3 Bucket -------------------------------------- #
 # Create an S3 bucket
 resource "aws_s3_bucket" "website" {
-  bucket        = var.bucket_name
+  bucket        = var.s3_bucket_name
   force_destroy = true
 }
 
@@ -23,45 +23,6 @@ resource "aws_s3_bucket_website_configuration" "static_website" {
   }
 }
 
-# Define IAM PutBucket policy
-resource "aws_iam_policy" "s3_policy" {
-  name        = "S3BucketPolicy"
-  description = "Allows putting bucket policies on specific S3 buckets."
-
-  policy = jsonencode({
-    "Version" : "2012-10-17",
-    "Statement" : [
-      {
-        "Effect" : "Allow"
-        "Action" : "s3:PutBucketPolicy",
-        "Resource" : "arn:aws:s3:::crc-fbrpinto-s3-tf"
-      }
-    ]
-  })
-}
-
-# Create an IAM Role
-resource "aws_iam_role" "s3_access_role" {
-  name = "s3-access-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Effect = "Allow",
-      Principal = {
-        Service = "s3.amazonaws.com"
-      },
-      Action = "sts:AssumeRole"
-    }]
-  })
-}
-
-# Attach policy to IAM role
-resource "aws_iam_policy_attachment" "s3_policy_attachment" {
-  name       = "s3_PutBucketPolicy"
-  policy_arn = aws_iam_policy.s3_policy.arn
-  roles      = [aws_iam_role.s3_access_role.name]
-}
-
 # Configure public access block settings for the S3 bucket
 resource "aws_s3_bucket_public_access_block" "public_access_block" {
   bucket                  = aws_s3_bucket.website.id
@@ -71,10 +32,11 @@ resource "aws_s3_bucket_public_access_block" "public_access_block" {
   restrict_public_buckets = false
 }
 
-# Attaches a policy that specifies the access to the S3 bucket
+# Attach a policy that specifies the access to the S3 bucket
 resource "aws_s3_bucket_policy" "public_access_policy" {
-  bucket = aws_s3_bucket.website.id
+  depends_on = [ aws_s3_bucket_public_access_block.public_access_block ]
 
+  bucket = aws_s3_bucket.website.id
   policy = jsonencode({
     "Version" : "2012-10-17",
     "Statement" : [
@@ -93,31 +55,27 @@ resource "aws_s3_bucket_policy" "public_access_policy" {
   })
 }
 
-# # Uploads the Website fronend code to the s3 bucket
-# resource "aws_s3_object" "frontend_files" {
-#   depends_on = [aws_s3_bucket.website]
-#   for_each   = fileset("../../frontend/public/", "**")
+# Uploads the Website fronend code to the s3 bucket
+resource "null_resource" "remove_and_upload_to_s3" {
+  provisioner "local-exec" {
+    command = "aws s3 sync ${path.module}/../../frontend/public/ s3://${aws_s3_bucket.website.id}"
+  }
+}
 
-#   bucket = var.bucket_name
-#   key    = each.value
-#   source = "../../frontend/public/${each.value}"
-#   etag   = filemd5("../../frontend/public/${each.value}")
-# }
 
-# ------------------------------------- S3 Bucket -------------------------------------- #
 # ------------------------------------- CloudFront ------------------------------------- #
-#Create Certificate and Routes
 # Create a certificate for the custom domain name
 resource "aws_acm_certificate" "certificate" {
-  provider = aws.us-east-1
-  domain_name       = "fbrpinto.com"
+  provider    = aws.us-east-1
+  domain_name = var.domain_name
   subject_alternative_names = [
-    "www.fbrpinto.com"
+    "www.${var.domain_name}"
   ]
   validation_method = "DNS"
 }
 
-resource "aws_route53_record" "example" {
+# Create the CNAME records for each domain name
+resource "aws_route53_record" "cname" {
   for_each = {
     for dvo in aws_acm_certificate.certificate.domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
@@ -135,13 +93,13 @@ resource "aws_route53_record" "example" {
 }
 
 
-# Validate the certificate for the custom domain name
+# Validate the created certificate
 resource "aws_acm_certificate_validation" "validation" {
-  provider = aws.us-east-1
+  provider        = aws.us-east-1
   certificate_arn = aws_acm_certificate.certificate.arn
 }
 
-# Create a record for the custom domain
+# Create a record (root) for the domain name
 resource "aws_route53_record" "root" {
   name    = aws_acm_certificate.certificate.domain_name
   type    = "A"
@@ -154,6 +112,7 @@ resource "aws_route53_record" "root" {
   }
 }
 
+# Create a record (www) for the domain name
 resource "aws_route53_record" "www" {
   name    = "www.${aws_acm_certificate.certificate.domain_name}"
   type    = "A"
@@ -166,8 +125,9 @@ resource "aws_route53_record" "www" {
   }
 }
 
+#Create a CloudFront distribution
 resource "aws_cloudfront_distribution" "s3_dist" {
-  depends_on = [  aws_acm_certificate_validation.validation ]
+  depends_on = [aws_acm_certificate_validation.validation]
 
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD"]
@@ -210,32 +170,3 @@ resource "aws_cloudfront_distribution" "s3_dist" {
 
   aliases = [aws_acm_certificate.certificate.domain_name, "www.${aws_acm_certificate.certificate.domain_name}"]
 }
-
-
-# // Route 53
-# resource "aws_route53_record" "www" {
-#   zone_id = var.hosted_zone_id
-#   name    = "www.fbrpinto.com"
-#   type    = "A"
-#   alias {
-#     name                   = aws_cloudfront_distribution.s3_distribution.domain_name
-#     zone_id                = aws_cloudfront_distribution.s3_distribution.hosted_zone_id
-#     evaluate_target_health = false
-#   }
-# }
-
-# resource "aws_route53_record" "root" {
-#   zone_id = var.hosted_zone_id
-#   name    = "fbrpinto.com"
-#   type    = "A"
-#   alias {
-#     name                   = aws_cloudfront_distribution.s3_distribution.domain_name
-#     zone_id                = aws_cloudfront_distribution.s3_distribution.hosted_zone_id
-#     evaluate_target_health = false
-#   }
-# }
-
-
-
-
-
