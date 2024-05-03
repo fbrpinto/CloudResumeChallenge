@@ -1,5 +1,6 @@
+# ------------------------------------- Providers -------------------------------------- #
 provider "aws" {
-  region = var.aws_region
+  region = "eu-west-1"
 }
 
 provider "aws" {
@@ -7,52 +8,171 @@ provider "aws" {
   alias  = "us-east-1"
 }
 
-# Create S3
-resource "aws_s3_bucket" "s3_bucket" {
-  bucket = var.bucket_name
+# ------------------------------------- S3 Bucket -------------------------------------- #
+# Create an S3 bucket
+resource "aws_s3_bucket" "website" {
+  bucket        = var.bucket_name
   force_destroy = true
 }
 
-resource "aws_s3_bucket_website_configuration" "s3_static_website" {
-  bucket = aws_s3_bucket.s3_bucket.id
+# Configure static website hosting for the S3 bucket
+resource "aws_s3_bucket_website_configuration" "static_website" {
+  bucket = aws_s3_bucket.website.id
   index_document {
     suffix = "index.html"
   }
 }
 
+# Define IAM PutBucket policy
+resource "aws_iam_policy" "s3_policy" {
+  name        = "S3BucketPolicy"
+  description = "Allows putting bucket policies on specific S3 buckets."
+
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Effect" : "Allow"
+        "Action" : "s3:PutBucketPolicy",
+        "Resource" : "arn:aws:s3:::crc-fbrpinto-s3-tf"
+      }
+    ]
+  })
+}
+
+# Create an IAM Role
+resource "aws_iam_role" "s3_access_role" {
+  name = "s3-access-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Service = "s3.amazonaws.com"
+      },
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+# Attach policy to IAM role
+resource "aws_iam_policy_attachment" "s3_policy_attachment" {
+  name       = "s3_PutBucketPolicy"
+  policy_arn = aws_iam_policy.s3_policy.arn
+  roles      = [aws_iam_role.s3_access_role.name]
+}
+
+# Configure public access block settings for the S3 bucket
 resource "aws_s3_bucket_public_access_block" "public_access_block" {
-  bucket                  = aws_s3_bucket.s3_bucket.id
+  bucket                  = aws_s3_bucket.website.id
   block_public_acls       = false
   block_public_policy     = false
   ignore_public_acls      = false
   restrict_public_buckets = false
 }
 
+# Attaches a policy that specifies the access to the S3 bucket
 resource "aws_s3_bucket_policy" "public_access_policy" {
-  bucket = aws_s3_bucket.s3_bucket.id
+  bucket = aws_s3_bucket.website.id
 
   policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
+    "Version" : "2012-10-17",
+    "Statement" : [
       {
-        Effect    = "Allow",
-        Principal = "*",
-        Action    = "s3:GetObject",
-        Resource  = "${aws_s3_bucket.s3_bucket.arn}/*",
+        "Sid" : "PublicReadGetObject",
+        "Effect" : "Allow",
+        "Principal" : "*",
+        "Action" : [
+          "s3:GetObject"
+        ],
+        "Resource" : [
+          "${aws_s3_bucket.website.arn}/*"
+        ]
       }
     ]
   })
 }
 
+# # Uploads the Website fronend code to the s3 bucket
+# resource "aws_s3_object" "frontend_files" {
+#   depends_on = [aws_s3_bucket.website]
+#   for_each   = fileset("../../frontend/public/", "**")
 
-// CloudFront
+#   bucket = var.bucket_name
+#   key    = each.value
+#   source = "../../frontend/public/${each.value}"
+#   etag   = filemd5("../../frontend/public/${each.value}")
+# }
 
-resource "aws_cloudfront_distribution" "s3_distribution" {
+# ------------------------------------- S3 Bucket -------------------------------------- #
+# ------------------------------------- CloudFront ------------------------------------- #
+#Create Certificate and Routes
+# Create a certificate for the custom domain name
+resource "aws_acm_certificate" "certificate" {
+  provider = aws.us-east-1
+  domain_name       = "fbrpinto.com"
+  subject_alternative_names = [
+    "www.fbrpinto.com"
+  ]
+  validation_method = "DNS"
+}
+
+resource "aws_route53_record" "example" {
+  for_each = {
+    for dvo in aws_acm_certificate.certificate.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = false
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 300
+  type            = each.value.type
+  zone_id         = var.hosted_zone_id
+}
+
+
+# Validate the certificate for the custom domain name
+resource "aws_acm_certificate_validation" "validation" {
+  provider = aws.us-east-1
+  certificate_arn = aws_acm_certificate.certificate.arn
+}
+
+# Create a record for the custom domain
+resource "aws_route53_record" "root" {
+  name    = aws_acm_certificate.certificate.domain_name
+  type    = "A"
+  zone_id = var.hosted_zone_id
+
+  alias {
+    name                   = aws_cloudfront_distribution.s3_dist.domain_name
+    zone_id                = aws_cloudfront_distribution.s3_dist.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "www" {
+  name    = "www.${aws_acm_certificate.certificate.domain_name}"
+  type    = "A"
+  zone_id = var.hosted_zone_id
+
+  alias {
+    name                   = aws_cloudfront_distribution.s3_dist.domain_name
+    zone_id                = aws_cloudfront_distribution.s3_dist.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_cloudfront_distribution" "s3_dist" {
+  depends_on = [  aws_acm_certificate_validation.validation ]
+
   default_cache_behavior {
-    //required
     allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = aws_s3_bucket.s3_bucket.bucket_regional_domain_name
+    target_origin_id       = aws_s3_bucket.website.bucket_regional_domain_name
     viewer_protocol_policy = "redirect-to-https"
 
     cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
@@ -63,8 +183,8 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   enabled = true
 
   origin {
-    domain_name = aws_s3_bucket_website_configuration.s3_static_website.website_endpoint
-    origin_id   = aws_s3_bucket.s3_bucket.bucket_regional_domain_name
+    domain_name = aws_s3_bucket_website_configuration.static_website.website_endpoint
+    origin_id   = aws_s3_bucket.website.bucket_regional_domain_name
 
     custom_origin_config {
       http_port              = 80
@@ -72,8 +192,6 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
       origin_protocol_policy = "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
-
-
   }
 
   restrictions {
@@ -84,38 +202,38 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn            = var.certificate_arn
+    acm_certificate_arn            = aws_acm_certificate.certificate.arn
     cloudfront_default_certificate = false
     ssl_support_method             = "sni-only"
     minimum_protocol_version       = "TLSv1.2_2021"
   }
 
-  aliases = ["fbrpinto.com", "www.fbrpinto.com"]
+  aliases = [aws_acm_certificate.certificate.domain_name, "www.${aws_acm_certificate.certificate.domain_name}"]
 }
 
 
-// Route 53
-resource "aws_route53_record" "www" {
-  zone_id = var.hosted_zone_id
-  name    = "www.fbrpinto.com"
-  type    = "A"
-  alias {
-    name                   = aws_cloudfront_distribution.s3_distribution.domain_name
-    zone_id                = aws_cloudfront_distribution.s3_distribution.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
+# // Route 53
+# resource "aws_route53_record" "www" {
+#   zone_id = var.hosted_zone_id
+#   name    = "www.fbrpinto.com"
+#   type    = "A"
+#   alias {
+#     name                   = aws_cloudfront_distribution.s3_distribution.domain_name
+#     zone_id                = aws_cloudfront_distribution.s3_distribution.hosted_zone_id
+#     evaluate_target_health = false
+#   }
+# }
 
-resource "aws_route53_record" "root" {
-  zone_id = var.hosted_zone_id
-  name    = "fbrpinto.com"
-  type    = "A"
-  alias {
-    name                   = aws_cloudfront_distribution.s3_distribution.domain_name
-    zone_id                = aws_cloudfront_distribution.s3_distribution.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
+# resource "aws_route53_record" "root" {
+#   zone_id = var.hosted_zone_id
+#   name    = "fbrpinto.com"
+#   type    = "A"
+#   alias {
+#     name                   = aws_cloudfront_distribution.s3_distribution.domain_name
+#     zone_id                = aws_cloudfront_distribution.s3_distribution.hosted_zone_id
+#     evaluate_target_health = false
+#   }
+# }
 
 
 

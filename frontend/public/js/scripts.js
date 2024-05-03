@@ -37,7 +37,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Get a reference to the element by its id
   const visitors_count = document.getElementById('visitors-count');
 
-  const requestUrl = "https://40a3urec8l.execute-api.eu-west-1.amazonaws.com/dev/visitors"
+  const requestUrl = "https://api.fbrpinto.com/visitors"
 
   // Data to be sent in the request body
   const data = {};
