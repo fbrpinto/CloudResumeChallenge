@@ -21,7 +21,7 @@ def get_visitors(table):
 
 
 def update_visitors(table, num_visitors):
-    #Uodate number of visitors
+    #Update number of visitors
     num_visitors += 1
 
     # Update DynamoDB table
