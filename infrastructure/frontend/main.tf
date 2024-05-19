@@ -1,3 +1,12 @@
+terraform {
+  backend "s3" {
+    bucket         = "crc-fbrpinto-terraform-state"
+    key            = "frontend/terraform.tfstate"
+    region         = "eu-west-1"
+    dynamodb_table = "crc-fbrpinto-terraform-lock-frontend"
+  }
+}
+
 # ------------------------------------- Providers -------------------------------------- #
 provider "aws" {
   region = "eu-west-1"
@@ -63,110 +72,110 @@ resource "null_resource" "remove_and_upload_to_s3" {
 }
 
 
-# ------------------------------------- CloudFront ------------------------------------- #
-# Create a certificate for the custom domain name
-resource "aws_acm_certificate" "certificate" {
-  provider    = aws.us-east-1
-  domain_name = var.domain_name
-  subject_alternative_names = [
-    "www.${var.domain_name}"
-  ]
-  validation_method = "DNS"
-}
+# # ------------------------------------- CloudFront ------------------------------------- #
+# # Create a certificate for the custom domain name
+# resource "aws_acm_certificate" "certificate" {
+#   provider    = aws.us-east-1
+#   domain_name = var.domain_name
+#   subject_alternative_names = [
+#     "www.${var.domain_name}"
+#   ]
+#   validation_method = "DNS"
+# }
 
-# Create the CNAME records for each domain name
-resource "aws_route53_record" "cname" {
-  for_each = {
-    for dvo in aws_acm_certificate.certificate.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
+# # Create the CNAME records for each domain name
+# resource "aws_route53_record" "cname" {
+#   for_each = {
+#     for dvo in aws_acm_certificate.certificate.domain_validation_options : dvo.domain_name => {
+#       name   = dvo.resource_record_name
+#       record = dvo.resource_record_value
+#       type   = dvo.resource_record_type
+#     }
+#   }
 
-  allow_overwrite = false
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 300
-  type            = each.value.type
-  zone_id         = var.hosted_zone_id
-}
+#   allow_overwrite = false
+#   name            = each.value.name
+#   records         = [each.value.record]
+#   ttl             = 300
+#   type            = each.value.type
+#   zone_id         = var.hosted_zone_id
+# }
 
 
-# Validate the created certificate
-resource "aws_acm_certificate_validation" "validation" {
-  provider        = aws.us-east-1
-  certificate_arn = aws_acm_certificate.certificate.arn
-}
+# # Validate the created certificate
+# resource "aws_acm_certificate_validation" "validation" {
+#   provider        = aws.us-east-1
+#   certificate_arn = aws_acm_certificate.certificate.arn
+# }
 
-# Create a record (root) for the domain name
-resource "aws_route53_record" "root" {
-  name    = aws_acm_certificate.certificate.domain_name
-  type    = "A"
-  zone_id = var.hosted_zone_id
+# # Create a record (root) for the domain name
+# resource "aws_route53_record" "root" {
+#   name    = aws_acm_certificate.certificate.domain_name
+#   type    = "A"
+#   zone_id = var.hosted_zone_id
 
-  alias {
-    name                   = aws_cloudfront_distribution.s3_dist.domain_name
-    zone_id                = aws_cloudfront_distribution.s3_dist.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
+#   alias {
+#     name                   = aws_cloudfront_distribution.s3_dist.domain_name
+#     zone_id                = aws_cloudfront_distribution.s3_dist.hosted_zone_id
+#     evaluate_target_health = false
+#   }
+# }
 
-# Create a record (www) for the domain name
-resource "aws_route53_record" "www" {
-  name    = "www.${aws_acm_certificate.certificate.domain_name}"
-  type    = "A"
-  zone_id = var.hosted_zone_id
+# # Create a record (www) for the domain name
+# resource "aws_route53_record" "www" {
+#   name    = "www.${aws_acm_certificate.certificate.domain_name}"
+#   type    = "A"
+#   zone_id = var.hosted_zone_id
 
-  alias {
-    name                   = aws_cloudfront_distribution.s3_dist.domain_name
-    zone_id                = aws_cloudfront_distribution.s3_dist.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
+#   alias {
+#     name                   = aws_cloudfront_distribution.s3_dist.domain_name
+#     zone_id                = aws_cloudfront_distribution.s3_dist.hosted_zone_id
+#     evaluate_target_health = false
+#   }
+# }
 
-#Create a CloudFront distribution
-resource "aws_cloudfront_distribution" "s3_dist" {
-  depends_on = [aws_acm_certificate_validation.validation]
+# #Create a CloudFront distribution
+# resource "aws_cloudfront_distribution" "s3_dist" {
+#   depends_on = [aws_acm_certificate_validation.validation]
 
-  default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = aws_s3_bucket.website.bucket_regional_domain_name
-    viewer_protocol_policy = "redirect-to-https"
+#   default_cache_behavior {
+#     allowed_methods        = ["GET", "HEAD"]
+#     cached_methods         = ["GET", "HEAD"]
+#     target_origin_id       = aws_s3_bucket.website.bucket_regional_domain_name
+#     viewer_protocol_policy = "redirect-to-https"
 
-    cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+#     cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
 
-    compress = true
-  }
+#     compress = true
+#   }
 
-  enabled = true
+#   enabled = true
 
-  origin {
-    domain_name = aws_s3_bucket_website_configuration.static_website.website_endpoint
-    origin_id   = aws_s3_bucket.website.bucket_regional_domain_name
+#   origin {
+#     domain_name = aws_s3_bucket_website_configuration.static_website.website_endpoint
+#     origin_id   = aws_s3_bucket.website.bucket_regional_domain_name
 
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 80
-      origin_protocol_policy = "http-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
-    }
-  }
+#     custom_origin_config {
+#       http_port              = 80
+#       https_port             = 80
+#       origin_protocol_policy = "http-only"
+#       origin_ssl_protocols   = ["TLSv1.2"]
+#     }
+#   }
 
-  restrictions {
-    geo_restriction {
-      restriction_type = "none"
-      locations        = []
-    }
-  }
+#   restrictions {
+#     geo_restriction {
+#       restriction_type = "none"
+#       locations        = []
+#     }
+#   }
 
-  viewer_certificate {
-    acm_certificate_arn            = aws_acm_certificate.certificate.arn
-    cloudfront_default_certificate = false
-    ssl_support_method             = "sni-only"
-    minimum_protocol_version       = "TLSv1.2_2021"
-  }
+#   viewer_certificate {
+#     acm_certificate_arn            = aws_acm_certificate.certificate.arn
+#     cloudfront_default_certificate = false
+#     ssl_support_method             = "sni-only"
+#     minimum_protocol_version       = "TLSv1.2_2021"
+#   }
 
-  aliases = [aws_acm_certificate.certificate.domain_name, "www.${aws_acm_certificate.certificate.domain_name}"]
-}
+#   aliases = [aws_acm_certificate.certificate.domain_name, "www.${aws_acm_certificate.certificate.domain_name}"]
+# }

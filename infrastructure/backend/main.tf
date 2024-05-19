@@ -1,3 +1,12 @@
+terraform {
+  backend "s3" {
+    bucket         = "crc-fbrpinto-terraform-state"
+    key            = "backend/terraform.tfstate"
+    region         = "eu-west-1"
+    dynamodb_table = "crc-fbrpinto-terraform-lock-backend"
+  }
+}
+
 # ------------------------------------- Providers -------------------------------------- #
 provider "aws" {
   region = "eu-west-1"
