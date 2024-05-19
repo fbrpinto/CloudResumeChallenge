@@ -1,3 +1,5 @@
+# -------------------------------------- Backend --------------------------------------- #
+
 terraform {
   backend "s3" {
     bucket         = "crc-fbrpinto-terraform-state"
