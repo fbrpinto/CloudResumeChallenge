@@ -34,7 +34,6 @@ def update_visitors(table, num_visitors):
     return num_visitors
 
 
-
 def lambda_handler(event, context, table_name=DYNAMODB_TABLE_NAME):
     try:
         # Select DynamoDB table
