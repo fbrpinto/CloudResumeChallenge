@@ -64,6 +64,6 @@ jobs:
       - name: Run Tests
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10.12"
+          python-version: "3.9"
       - run: python3 backend/lambda_function_test.py
 
