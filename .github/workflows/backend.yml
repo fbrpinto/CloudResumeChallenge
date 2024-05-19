@@ -58,12 +58,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: pip install boto3 moto['all']
-
-      - name: Run Tests
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - run: python backend/lambda_function_test.py
+          python-version: "3.10"
+      
+      - name: Install Dependencies
+        run: pip install boto3 moto['dynamodb']
+
+      - name: Run Tests
+        run: python3 backend/lambda_function_test.py
 
