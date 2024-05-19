@@ -63,4 +63,3 @@ def lambda_handler(event, context, table_name=DYNAMODB_TABLE_NAME):
                 'Content-Type': 'application/json',
             }
         }
-    
