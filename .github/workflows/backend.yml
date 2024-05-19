@@ -59,7 +59,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Dependencies
-        run: pip install six boto3 moto['dynamodb']
+        run: pip install boto3 moto['all']
 
       - name: Run Tests
         uses: actions/setup-python@v5
