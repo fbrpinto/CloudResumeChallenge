@@ -67,5 +67,7 @@ jobs:
         run: pip install boto3 moto['dynamodb']
 
       - name: Run Tests
-        run: python3 backend/lambda_function_test.py
+        run: python backend/lambda_function_test.py
+        env:
+          AWS_REGION: "eu-west-1"
 
