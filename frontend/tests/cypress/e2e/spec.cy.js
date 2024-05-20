@@ -1,6 +1,5 @@
 const websiteUrl = "https://fbrpinto.com";
-const APIUrl =
-  "https://40a3urec8l.execute-api.eu-west-1.amazonaws.com/dev/visitors";
+const APIUrl = "https://api.fbrpinto.com/visitors";
 
 describe("Test Menu Navigation", () => {
   it("should navigate to different sections of the resume", () => {
@@ -62,10 +61,7 @@ describe("Test Visitors Count in the DOM", () => {
   it("should update the visitors count in the DOM", () => {
     let previousCount = 0;
 
-    cy.intercept(
-      "POST",
-      "https://40a3urec8l.execute-api.eu-west-1.amazonaws.com/dev/visitors"
-    ).as("postRequest");
+    cy.intercept("POST", APIUrl).as("postRequest");
 
     // Visit the page
     cy.visit(websiteUrl);
