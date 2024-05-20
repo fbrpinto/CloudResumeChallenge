@@ -11,7 +11,7 @@ class BackendUnitTesting(unittest.TestCase):
         self.mock_aws.start()
 
         # Create a DynamoDB client
-        dynamodb = boto3.client('dynamodb')
+        dynamodb = boto3.client('dynamodb', region_name='eu-west-1')
 
         table_name = DYNAMODB_TABLE_NAME
         key_schema = [
