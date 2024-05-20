@@ -36,13 +36,13 @@ class BackendUnitTesting(unittest.TestCase):
         self.mock_aws.stop()
 
     def test_get_visitors_empty_table(self):
-        dynamodb = boto3.resource('dynamodb')
+        dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
         table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
         self.assertEqual(get_visitors(table), 0)
     
     def test_get_visitors_with_value(self):
-        dynamodb = boto3.resource('dynamodb')
+        dynamodb = boto3.resource('dynamodb',region_name='eu-west-1')
         table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
         table.update_item(
@@ -54,7 +54,7 @@ class BackendUnitTesting(unittest.TestCase):
         self.assertEqual(get_visitors(table), 100)
 
     def test_update_visitors(self):
-        dynamodb = boto3.resource('dynamodb')
+        dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
         table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
         new_num_visitors = update_visitors(table, 100)
