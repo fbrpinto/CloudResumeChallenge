@@ -37,7 +37,7 @@ def update_visitors(table, num_visitors):
 def lambda_handler(event, context, table_name=DYNAMODB_TABLE_NAME):
     try:
         # Select DynamoDB table
-        dynamodb = boto3.resource('dynamodb')
+        dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
         table = dynamodb.Table(table_name)
 
         # Get current number of visitors from DynamoDB
