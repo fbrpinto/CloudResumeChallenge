@@ -31,6 +31,32 @@ window.addEventListener("DOMContentLoaded", (event) => {
   });
 });
 
+function toggleDetails(skillId) {
+  const details = document.getElementById(skillId);
+  if (details.style.display === "block") {
+      details.style.display = "none";
+  } else {
+      details.style.display = "block";
+  }
+}
+
+// Select all skills with certification lists
+const skills = document.querySelectorAll('.skills-list li');
+
+skills.forEach(skill => {
+    const skillName = skill.querySelector('.skill-name');
+    const certificationList = skill.querySelector('.certification-list');
+
+    // Only add event listeners if there is a certification list
+    if (certificationList) {
+        skillName.addEventListener('click', () => {
+            // Toggle the display of the certification list
+            const isVisible = certificationList.style.display === 'block';
+            certificationList.style.display = isVisible ? 'none' : 'block';
+        });
+    }
+});
+
 
 // Wait for the document to be fully loaded
 document.addEventListener("DOMContentLoaded", function () {
