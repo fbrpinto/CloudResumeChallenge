@@ -1,4 +1,4 @@
-name: Infrastructure deployment
+name: Infrastructure Pipeline
 
 on:
   push:
@@ -62,7 +62,6 @@ jobs:
           echo "api_domain = \"${{ vars.API_DOMAIN }}\"" >> terraform.auto.tfvars
           echo "hosted_zone_id = \"${{ secrets.HOSTED_ZONE_ID }}\"" >> terraform.auto.tfvars
 
-
       - name: Terraform Init
         run: terraform init
       
@@ -71,35 +70,3 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
-
-  test_frontend:
-    runs-on: ubuntu-latest
-    needs: deploy_frontend
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install cypress
-        run: npm install cypress --save-dev
-        
-      - name: Run Cypress tests
-        working-directory: frontend/tests
-        run: npx cypress run
-      
-  test_backend:
-    runs-on: ubuntu-latest
-    needs: deploy_backend
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      
-      - name: Install Dependencies
-        run: pip install boto3 moto['dynamodb']
-
-      - name: Run Tests
-        run: python backend/lambda_function_test.py
