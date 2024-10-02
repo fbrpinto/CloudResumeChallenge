@@ -70,6 +70,7 @@ locals {
     ".html" : "text/html",
     ".css" : "text/css",
     ".js" : "text/javascript"
+    ".svg" : "image/svg+xml"
   }
 }
 
