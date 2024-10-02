@@ -66,12 +66,14 @@ resource "aws_s3_bucket_policy" "public_access_policy" {
 }
 
 # Uploads the Website fronend code to the s3 bucket
-resource "null_resource" "remove_and_upload_to_s3" {
-  provisioner "local-exec" {
-    command = "aws s3 sync ${path.module}/../../frontend/public/ s3://${aws_s3_bucket.website.id}"
-  }
+resource "aws_s3_object" "frontend_files" {
+  for_each = fileset("${path.module}/../../frontend/public", "**/*")
+  
+  bucket = aws_s3_bucket.website.bucket
+  key    = each.key
+  source = "${path.module}/../../frontend/public/${each.key}"
+  etag   = filemd5("${path.module}/../../frontend/public/${each.key}")
 }
-
 
 # ------------------------------------- CloudFront ------------------------------------- #
 # Create a certificate for the custom domain name
