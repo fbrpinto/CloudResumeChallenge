@@ -65,6 +65,14 @@ resource "aws_s3_bucket_policy" "public_access_policy" {
   })
 }
 
+locals {
+  content_types = {
+    ".html" : "text/html",
+    ".css" : "text/css",
+    ".js" : "text/javascript"
+  }
+}
+
 # Uploads the Website fronend code to the s3 bucket
 resource "aws_s3_object" "frontend_files" {
   for_each = fileset("${path.module}/../../frontend/public", "**/*")
@@ -72,6 +80,7 @@ resource "aws_s3_object" "frontend_files" {
   bucket = aws_s3_bucket.website.bucket
   key    = each.key
   source = "${path.module}/../../frontend/public/${each.key}"
+  content_type = lookup(local.content_types, regex("\\.[^.]+$", each.value), null)
   etag   = filemd5("${path.module}/../../frontend/public/${each.key}")
 }
 
