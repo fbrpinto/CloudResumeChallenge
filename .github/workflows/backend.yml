@@ -1,4 +1,4 @@
-name: Backend - deploy and test
+name: Backend Pipeline
 
 on:
   push:
@@ -28,11 +28,29 @@ jobs:
         with:
           name: lambda-function
           path: infrastructure/backend/lambda_functions/lambda_function_backend.zip
+  
+  test:
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      
+      - name: Install Dependencies
+        run: pip install boto3 moto['dynamodb']
+
+      - name: Run Tests
+        run: python backend/lambda_function_test.py
+  
   deploy:
     runs-on: ubuntu-latest
 
-    needs: build
+    needs: [build, test]
 
     steps:
       - name: Download ZIP file artifact
@@ -50,22 +68,3 @@ jobs:
 
       - name: Deploy Lambda function
         run: aws lambda update-function-code --function-name crc-fbrpinto-lambda-tf --zip-file fileb:///tmp/lambda_function_backend.zip
-
-  test:
-    runs-on: ubuntu-latest
-    needs: deploy
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      
-      - name: Install Dependencies
-        run: pip install boto3 moto['dynamodb']
-
-      - name: Run Tests
-        run: python backend/lambda_function_test.py
-
