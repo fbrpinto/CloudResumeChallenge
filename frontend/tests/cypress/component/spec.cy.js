@@ -1,4 +1,4 @@
-const websiteUrl = "https://fbrpinto.com";
+const websiteUrl = "http://localhost:5000/";
 
 describe("Test Menu Navigation", () => {
   it("should navigate to different sections of the resume", () => {
