@@ -22,7 +22,7 @@ jobs:
         sleep 5
 
     - name: Install cypress
-        run: npm install cypress --save-dev
+      run: npm install cypress --save-dev
 
     - name: Run tests
       working-directory: frontend/tests
