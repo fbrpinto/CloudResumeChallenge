@@ -1,4 +1,4 @@
-const websiteUrl = "https://www.fbrpinto.com";
+const websiteUrl = "http://localhost:5000/";
 const APIUrl = "https://api.fbrpinto.com/visitors";
 
 describe("Test Menu Navigation", () => {

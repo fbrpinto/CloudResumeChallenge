@@ -27,8 +27,11 @@ jobs:
     - name: Run tests
       working-directory: frontend/tests
       run: npx cypress run --config-file cypress.config.component.js
+
+      
   deploy:
     runs-on: ubuntu-latest
+    needs: test
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
