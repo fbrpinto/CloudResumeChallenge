@@ -26,9 +26,9 @@ jobs:
 
     - name: Run tests
       working-directory: frontend/tests
-      run: npx cypress run --config-file cypress.config.component.js
+      run: npx cypress run
 
-      
+
   deploy:
     runs-on: ubuntu-latest
     needs: test
