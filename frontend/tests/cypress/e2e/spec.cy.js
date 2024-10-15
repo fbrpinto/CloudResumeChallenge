@@ -1,4 +1,4 @@
-const websiteUrl = "https://fbrpinto.com";
+const websiteUrl = "https://www.fbrpinto.com";
 const APIUrl = "https://api.fbrpinto.com/visitors";
 
 describe("Test Menu Navigation", () => {
@@ -17,11 +17,8 @@ describe("Test Menu Navigation", () => {
     cy.get('a[href="#skills"]').click();
     cy.url().should("include", "#skills");
 
-    cy.get('a[href="#interests"]').click();
-    cy.url().should("include", "#interests");
-
-    cy.get('a[href="#awards"]').click();
-    cy.url().should("include", "#awards");
+    cy.get('a[href="#projects"]').click();
+    cy.url().should("include", "#projects");
   });
 });
 

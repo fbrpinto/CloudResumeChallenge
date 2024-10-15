@@ -1,4 +1,4 @@
-name: Frontend - deploy and test
+name: Frontend Pipeline
 
 on:
   push:
