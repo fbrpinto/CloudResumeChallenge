@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Remove any existing ZIP file
+# Remove existing ZIP file
 rm -f ../infrastructure/backend/lambda_functions/lambda_function_backend.zip
 
 # Package the code into a ZIP file

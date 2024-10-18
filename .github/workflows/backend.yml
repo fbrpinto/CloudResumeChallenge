@@ -1,5 +1,8 @@
+# Backend CI/CD Pipeline
+
 name: Backend Pipeline
 
+# Trigger on push to 'main' branch, only for changes in 'backend/'
 on:
   push:
     branches:
@@ -7,14 +10,15 @@ on:
     paths:
       - "backend/**"
 
+# Use AWS credentials from GitHub secrets
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 jobs:
+  # Build: Package Lambda function
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,15 +27,15 @@ jobs:
         working-directory: backend
         run: ./package_lambda.sh
 
-      - name: Upload ZIP file as artifact
+      - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: lambda-function
           path: infrastructure/backend/lambda_functions/lambda_function_backend.zip
   
+  # Test: Run unit tests
   test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -41,19 +45,18 @@ jobs:
         with:
           python-version: "3.10"
       
-      - name: Install Dependencies
+      - name: Install dependencies
         run: pip install boto3 moto['dynamodb']
 
-      - name: Run Tests
+      - name: Run tests
         run: python backend/lambda_function_test.py
   
+  # Deploy: Upload Lambda to AWS
   deploy:
     runs-on: ubuntu-latest
-
     needs: [build, test]
-
     steps:
-      - name: Download ZIP file artifact
+      - name: Download ZIP artifact
         uses: actions/download-artifact@v4
         with:
           name: lambda-function
@@ -66,5 +69,5 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: "eu-west-1"
 
-      - name: Deploy Lambda function
+      - name: Deploy Lambda
         run: aws lambda update-function-code --function-name crc-fbrpinto-lambda-tf --zip-file fileb:///tmp/lambda_function_backend.zip

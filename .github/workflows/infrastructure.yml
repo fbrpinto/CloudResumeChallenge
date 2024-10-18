@@ -1,59 +1,61 @@
+# Infrastructure CI/CD Pipeline
+
 name: Infrastructure Pipeline
 
+# Trigger on push to 'main' branch, only for changes in 'infrastructure/'
 on:
   push:
     branches:
-    - main
+      - main
     paths:
-    - 'infrastructure/**'
+      - 'infrastructure/**'
 
+# Use AWS credentials from GitHub secrets
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          
+
 jobs:
+  # Deploy: Frontend infrastructure using Terraform
   deploy_frontend:
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: infrastructure/frontend
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        
+
       - name: Generate TFVars file
         run: |
           echo "domain_name = \"${{ vars.DOMAIN_NAME }}\"" > terraform.auto.tfvars
           echo "hosted_zone_id = \"${{ secrets.HOSTED_ZONE_ID }}\"" >> terraform.auto.tfvars
-        
+
       - name: Terraform Init
         run: terraform init
-      
+
       - name: Terraform Plan
         run: terraform plan
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
-        
+
+  # Deploy: Backend infrastructure using Terraform
   deploy_backend:
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: infrastructure/backend
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        
+
       - name: Generate TFVars file
         run: |
           echo "slack_webhook = \"${{ secrets.WEBHOOK_SLACK }}\"" > terraform.auto.tfvars
@@ -64,7 +66,7 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-      
+
       - name: Terraform Plan
         run: terraform plan
 
