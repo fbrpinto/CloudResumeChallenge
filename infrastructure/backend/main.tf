@@ -132,40 +132,9 @@ resource "aws_acm_certificate" "api_certificate" {
   validation_method = "DNS"
 }
 
-# Create the CNAME record for the custom domain name
-resource "aws_route53_record" "cname" {
-  for_each = {
-    for dvo in aws_acm_certificate.api_certificate.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-
-  allow_overwrite = false
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 300
-  type            = each.value.type
-  zone_id         = var.hosted_zone_id
-}
-
 # Validate the certificate for the custom domain name
 resource "aws_acm_certificate_validation" "api_validation" {
   certificate_arn = aws_acm_certificate.api_certificate.arn
-}
-
-# Create a record for the custom domain
-resource "aws_route53_record" "api_record" {
-  name    = aws_acm_certificate.api_certificate.domain_name
-  type    = "A"
-  zone_id = var.hosted_zone_id
-
-  alias {
-    name                   = aws_apigatewayv2_domain_name.domain.domain_name_configuration[0].target_domain_name
-    zone_id                = aws_apigatewayv2_domain_name.domain.domain_name_configuration[0].hosted_zone_id
-    evaluate_target_health = false
-  }
 }
 
 # Certificate validation record in Cloudflare, needed for ACM to renew the certificate

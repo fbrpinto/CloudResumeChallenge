@@ -106,55 +106,10 @@ resource "aws_acm_certificate" "certificate" {
   validation_method = "DNS"
 }
 
-# Create the CNAME records for each domain name
-resource "aws_route53_record" "cname" {
-  for_each = {
-    for dvo in aws_acm_certificate.certificate.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-
-  allow_overwrite = false
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 300
-  type            = each.value.type
-  zone_id         = var.hosted_zone_id
-}
-
-
 # Validate the created certificate
 resource "aws_acm_certificate_validation" "validation" {
   provider        = aws.us-east-1
   certificate_arn = aws_acm_certificate.certificate.arn
-}
-
-# Create a record (root) for the domain name
-resource "aws_route53_record" "root" {
-  name    = aws_acm_certificate.certificate.domain_name
-  type    = "A"
-  zone_id = var.hosted_zone_id
-
-  alias {
-    name                   = aws_cloudfront_distribution.s3_dist.domain_name
-    zone_id                = aws_cloudfront_distribution.s3_dist.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
-
-# Create a record (www) for the domain name
-resource "aws_route53_record" "www" {
-  name    = "www.${aws_acm_certificate.certificate.domain_name}"
-  type    = "A"
-  zone_id = var.hosted_zone_id
-
-  alias {
-    name                   = aws_cloudfront_distribution.s3_dist.domain_name
-    zone_id                = aws_cloudfront_distribution.s3_dist.hosted_zone_id
-    evaluate_target_health = false
-  }
 }
 
 # --------------------------------- Cloudflare DNS ------------------------------------- #

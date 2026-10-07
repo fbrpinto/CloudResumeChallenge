@@ -1,7 +1,3 @@
-variable "hosted_zone_id" {
-  description = "Hosted Zone ID to add the records"
-}
-
 variable "cloudflare_zone_id" {
   description = "Cloudflare Zone ID to add the records"
 }
