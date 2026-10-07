@@ -60,7 +60,8 @@ jobs:
       - name: Generate TFVars file
         run: |
           echo "slack_webhook = \"${{ secrets.WEBHOOK_SLACK }}\"" > terraform.auto.tfvars
-          echo "pagerduty_webhook = \"${{ secrets.WEBHOOK_PAGERDUTY }}\"" >> terraform.auto.tfvars
+          # Disabled: PagerDuty no longer used
+          # echo "pagerduty_webhook = \"${{ secrets.WEBHOOK_PAGERDUTY }}\"" >> terraform.auto.tfvars
           echo "notification_email = \"${{ secrets.NOTIFICATION_EMAIL }}\"" >> terraform.auto.tfvars
           echo "api_domain = \"${{ vars.API_DOMAIN }}\"" >> terraform.auto.tfvars
           echo "cloudflare_zone_id = \"${{ secrets.CLOUDFLARE_ZONE_ID }}\"" >> terraform.auto.tfvars

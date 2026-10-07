@@ -231,12 +231,12 @@ resource "aws_sns_topic_subscription" "email_subscription" {
   endpoint  = var.notification_email
 }
 
-# Subscribe PagerDuty webhook URL to the SNS topic
-resource "aws_sns_topic_subscription" "pagerduty_subscription" {
-  topic_arn = aws_sns_topic.sns_topic.arn
-  protocol  = "https"
-  endpoint  = var.pagerduty_webhook
-}
+# Subscribe PagerDuty webhook URL to the SNS topic (disabled: PagerDuty no longer used)
+# resource "aws_sns_topic_subscription" "pagerduty_subscription" {
+#   topic_arn = aws_sns_topic.sns_topic.arn
+#   protocol  = "https"
+#   endpoint  = var.pagerduty_webhook
+# }
 
 # Subscribe Lambda Function (to integrate with Slack) to the SNS topic
 resource "aws_sns_topic_subscription" "lambda_subscription" {
