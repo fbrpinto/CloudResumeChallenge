@@ -35,41 +35,43 @@ resource "aws_s3_bucket" "website" {
   force_destroy = true
 }
 
-# Configure static website hosting for the S3 bucket
-resource "aws_s3_bucket_website_configuration" "static_website" {
-  bucket = aws_s3_bucket.website.id
-  index_document {
-    suffix = "index.html"
-  }
-}
-
-# Configure public access block settings for the S3 bucket
+# Private bucket: only the CloudFront distribution can read it (through OAC).
+# Applied after the policy below, so CloudFront keeps reading while the bucket is closed.
 resource "aws_s3_bucket_public_access_block" "public_access_block" {
+  depends_on = [aws_s3_bucket_policy.cloudfront_read]
+
   bucket                  = aws_s3_bucket.website.id
-  block_public_acls       = false
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
-# Attach a policy that specifies the access to the S3 bucket
-resource "aws_s3_bucket_policy" "public_access_policy" {
-  depends_on = [aws_s3_bucket_public_access_block.public_access_block]
+moved {
+  from = aws_s3_bucket_policy.public_access_policy
+  to   = aws_s3_bucket_policy.cloudfront_read
+}
 
+# Lets only this distribution read the files. It references the distribution, so it is replaced
+# after CloudFront has switched to the OAC origin (the old public policy covers the switch).
+resource "aws_s3_bucket_policy" "cloudfront_read" {
   bucket = aws_s3_bucket.website.id
   policy = jsonencode({
     "Version" : "2012-10-17",
     "Statement" : [
       {
-        "Sid" : "PublicReadGetObject",
+        "Sid" : "AllowCloudFrontRead",
         "Effect" : "Allow",
-        "Principal" : "*",
-        "Action" : [
-          "s3:GetObject"
-        ],
-        "Resource" : [
-          "${aws_s3_bucket.website.arn}/*"
-        ]
+        "Principal" : {
+          "Service" : "cloudfront.amazonaws.com"
+        },
+        "Action" : "s3:GetObject",
+        "Resource" : "${aws_s3_bucket.website.arn}/*",
+        "Condition" : {
+          "StringEquals" : {
+            "AWS:SourceArn" : aws_cloudfront_distribution.s3_dist.arn
+          }
+        }
       }
     ]
   })
@@ -168,6 +170,15 @@ resource "cloudflare_dns_record" "dmarc" {
   ttl     = 1
 }
 
+# Signs CloudFront's requests to S3, so the bucket can stay private (free)
+resource "aws_cloudfront_origin_access_control" "s3" {
+  name                              = "crc-fbrpinto-oac"
+  description                       = "CloudFront access to the website bucket"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
 #Create a CloudFront distribution
 resource "aws_cloudfront_distribution" "s3_dist" {
   depends_on = [aws_acm_certificate_validation.validation]
@@ -183,19 +194,18 @@ resource "aws_cloudfront_distribution" "s3_dist" {
     compress = true
   }
 
-  enabled = true
+  enabled             = true
+  default_root_object = "index.html"
 
   origin {
-    domain_name = aws_s3_bucket_website_configuration.static_website.website_endpoint
-    origin_id   = aws_s3_bucket.website.bucket_regional_domain_name
-
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 80
-      origin_protocol_policy = "http-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
-    }
+    domain_name              = aws_s3_bucket.website.bucket_regional_domain_name
+    origin_id                = aws_s3_bucket.website.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
   }
+
+  # Serve only from North America, Europe and Israel: the lowest price per GB if traffic
+  # ever goes past the free tier. Visitors elsewhere are served from the nearest of these.
+  price_class = "PriceClass_100"
 
   restrictions {
     geo_restriction {
