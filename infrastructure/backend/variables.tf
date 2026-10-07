@@ -1,11 +1,7 @@
-variable "slack_webhook" {
-  description = "Webhook for Slack Integration"
+variable "ntfy_topic" {
+  description = "ntfy.sh topic for alert push notifications (anyone with the name can read it)"
+  sensitive   = true
 }
-
-# Disabled: PagerDuty no longer used
-# variable "pagerduty_webhook" {
-#   description = "Webhook for PagerDuty Integration"
-# }
 
 variable "notification_email" {
   description = "E-mail to send notification based on CloudWatch metrics"
@@ -39,12 +35,22 @@ variable "sns_topic_name" {
   default     = "crc-fbrpinto-sns-tf"
 }
 
+variable "sns_topic_us_east_1_name" {
+  description = "Name of the SNS topic for us-east-1 alarms and cost anomalies (also used by the frontend and account stacks)"
+  default     = "crc-fbrpinto-sns-us-east-1-tf"
+}
+
 variable "cloud_watch_metric_name" {
   description = "CloudWatch metric name to monitor the backend Lambda function"
   default     = "crc-fbrpinto-lambda-tf"
 }
 
-variable "slack_lambda_function_name" {
-  description = "Lambda function name to integrate with Slack to notify when an alarm is triggered"
-  default     = "crc-fbrpinto-lambda_slack-tf"
+variable "notify_lambda_function_name" {
+  description = "Lambda function name that sends alerts to ntfy"
+  default     = "crc-fbrpinto-lambda_notify-tf"
+}
+
+variable "anomaly_threshold" {
+  description = "Cost anomaly threshold in USD, shown in ntfy messages. Keep in sync with the account stack"
+  default     = 5
 }
