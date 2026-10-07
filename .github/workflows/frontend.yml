@@ -2,13 +2,19 @@
 
 name: Frontend Pipeline
 
-# Trigger on push to 'main' branch, only for changes in 'frontend/'
+# Trigger on push to 'main' branch, only for changes in 'frontend/' (or manually)
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
     paths:
       - 'frontend/**'
+
+# Allow requesting an OIDC token to sign in to AWS
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   # Test: Run Cypress tests
@@ -16,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Start local server
         working-directory: frontend/public
@@ -37,15 +43,13 @@ jobs:
     needs: test
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: "eu-west-1"
 
       - name: Sync frontend code with S3 bucket
-        uses: jakejarvis/s3-sync-action@v0.5.1
-        with:
-          args: --delete
-        env:
-          AWS_S3_BUCKET: crc-fbrpinto-s3-tf
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: 'eu-west-1'
-          SOURCE_DIR: 'frontend/public'
+        run: aws s3 sync frontend/public s3://crc-fbrpinto-s3-tf --delete --no-progress
