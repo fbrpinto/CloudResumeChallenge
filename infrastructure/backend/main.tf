@@ -60,11 +60,24 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
-# Attach policy to IAM role
-resource "aws_iam_policy_attachment" "lambda_execution" {
-  name       = "lambda_policy"
+# Attach policy to IAM role (non-exclusive: other roles may use the same policy)
+resource "aws_iam_role_policy_attachment" "lambda_execution" {
+  role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
-  roles      = [aws_iam_role.lambda_role.name]
+}
+
+# Hand the existing attachment over from the old exclusive resource without detaching it
+removed {
+  from = aws_iam_policy_attachment.lambda_execution
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+import {
+  to = aws_iam_role_policy_attachment.lambda_execution
+  id = "lambda_role/arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
 }
 
 # Create Backend Lambda function
@@ -73,7 +86,7 @@ resource "aws_lambda_function" "backend_lambda" {
   function_name = var.backend_lambda_function_name
   role          = aws_iam_role.lambda_role.arn
   handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.10"
+  runtime       = "python3.13"
 }
 
 # Allow API Gateway to invoke Lambda function
@@ -226,11 +239,12 @@ resource "aws_cloudwatch_metric_alarm" "cloud_watch_alarm" {
   alarm_name          = var.cloud_watch_metric_name
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
+  datapoints_to_alarm = 1
   metric_name         = "Invocations"
   namespace           = "AWS/Lambda"
-  period              = 10
+  period              = 60
   statistic           = "SampleCount"
-  threshold           = 2500
+  threshold           = 15000
 
   dimensions = {
     FunctionName = aws_lambda_function.backend_lambda.function_name
@@ -290,7 +304,7 @@ resource "aws_lambda_function" "slack_lambda" {
   function_name = var.slack_lambda_function_name
   role          = aws_iam_role.lambda_slack_role.arn
   handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.10"
+  runtime       = "python3.14"
 
   environment {
     variables = {
