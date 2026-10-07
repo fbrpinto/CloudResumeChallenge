@@ -6,12 +6,22 @@ terraform {
     region         = "eu-west-1"
     dynamodb_table = "crc-fbrpinto-terraform-lock-backend"
   }
+
+  required_providers {
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5"
+    }
+  }
 }
 
 # ------------------------------------- Providers -------------------------------------- #
 provider "aws" {
   region = "eu-west-1"
 }
+
+# Reads the API token from the CLOUDFLARE_API_TOKEN environment variable
+provider "cloudflare" {}
 
 
 # ----------------------------------- DynamoDB Table ----------------------------------- #
@@ -143,6 +153,34 @@ resource "aws_route53_record" "api_record" {
     zone_id                = aws_apigatewayv2_domain_name.domain.domain_name_configuration[0].hosted_zone_id
     evaluate_target_health = false
   }
+}
+
+# Certificate validation record in Cloudflare, needed for ACM to renew the certificate
+resource "cloudflare_dns_record" "cname" {
+  for_each = {
+    for dvo in aws_acm_certificate.api_certificate.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  zone_id = var.cloudflare_zone_id
+  name    = trimsuffix(each.value.name, ".")
+  content = trimsuffix(each.value.record, ".")
+  type    = each.value.type
+  ttl     = 1
+  proxied = false
+}
+
+# Create a record in Cloudflare for the custom domain
+resource "cloudflare_dns_record" "api_record" {
+  zone_id = var.cloudflare_zone_id
+  name    = aws_acm_certificate.api_certificate.domain_name
+  content = aws_apigatewayv2_domain_name.domain.domain_name_configuration[0].target_domain_name
+  type    = "CNAME"
+  ttl     = 1
+  proxied = false
 }
 
 # Set the custom domain name

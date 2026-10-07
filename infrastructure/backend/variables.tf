@@ -14,6 +14,10 @@ variable "hosted_zone_id" {
   description = "Hosted Zone ID to add the records"
 }
 
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID to add the records"
+}
+
 variable "api_domain" {
   description = "Custom Domain Name for the API (used by frontend code)"
 }
