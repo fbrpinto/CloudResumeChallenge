@@ -87,6 +87,10 @@ resource "aws_lambda_function" "backend_lambda" {
   role          = aws_iam_role.lambda_role.arn
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.13"
+
+  # More memory also means more CPU, so cold starts finish well within the timeout
+  memory_size = 512
+  timeout     = 10
 }
 
 # Allow API Gateway to invoke Lambda function
