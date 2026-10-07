@@ -1,6 +1,8 @@
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from moto import mock_aws
 import boto3
+import lambda_function
 from lambda_function import get_visitors, update_visitors, lambda_handler, DYNAMODB_TABLE_NAME
 
 class BackendUnitTesting(unittest.TestCase):
@@ -8,6 +10,9 @@ class BackendUnitTesting(unittest.TestCase):
     def setUp(self):
         self.mock_aws = mock_aws()  # Start AWS mocking
         self.mock_aws.start()
+
+        # Drop the connection cached by a previous test, so it's recreated inside this mock
+        lambda_function._dynamodb = None
 
         # Create a DynamoDB client for testing
         dynamodb = boto3.client('dynamodb', region_name='eu-west-1')
@@ -58,8 +63,15 @@ class BackendUnitTesting(unittest.TestCase):
         dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
         table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
+        # Start from 100 visitors
+        table.update_item(
+            Key={'id': '0'},
+            UpdateExpression='SET visitors = :nv',
+            ExpressionAttributeValues={':nv': 100}
+        )
+
         # Call update_visitors and assert that it increments the visitor count correctly
-        new_num_visitors = update_visitors(table, 100)
+        new_num_visitors = update_visitors(table)
 
         read_num_visitors = table.get_item(
             Key={'id': '0'}
@@ -67,6 +79,24 @@ class BackendUnitTesting(unittest.TestCase):
 
         self.assertEqual(new_num_visitors, 101)  # Check if updated visitors count is correct
         self.assertEqual(new_num_visitors, read_num_visitors)  # Check if retrieved count matches updated count
+
+    def test_update_visitors_empty_table(self):
+        dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+        table = dynamodb.Table(DYNAMODB_TABLE_NAME)
+
+        # Assert that the first visit is counted when the item doesn't exist yet
+        self.assertEqual(update_visitors(table), 1)
+
+    def test_lambda_handler_concurrent(self):
+        # Test that simultaneous visits are all counted (no lost updates)
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            responses = list(pool.map(lambda _: lambda_handler(None, None), range(50)))
+
+        self.assertTrue(all(r['statusCode'] == 200 for r in responses))
+
+        dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+        table = dynamodb.Table(DYNAMODB_TABLE_NAME)
+        self.assertEqual(get_visitors(table), 50)
 
     def test_lambda_handler_valid(self):
         # Test the lambda handler for valid responses
@@ -88,7 +118,7 @@ class BackendUnitTesting(unittest.TestCase):
 
         # Assert that the response indicates an error
         self.assertEqual(response['statusCode'], 500)
-        self.assertEqual(response['body'], '{"error": "Invalid Request", "message": "An error occurred (ResourceNotFoundException) when calling the GetItem operation: Requested resource not found"}')
+        self.assertEqual(response['body'], '{"error": "Invalid Request", "message": "An error occurred (ResourceNotFoundException) when calling the UpdateItem operation: Requested resource not found"}')
         self.assertEqual(response['headers']['Content-Type'], 'application/json')
 
 if __name__ == '__main__':

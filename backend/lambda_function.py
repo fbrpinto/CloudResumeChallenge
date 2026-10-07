@@ -4,6 +4,17 @@ import boto3
 
 DYNAMODB_TABLE_NAME = 'crc-fbrpinto-dynamodb-tf'
 
+# Created once per Lambda instance and reused across invocations
+_dynamodb = None
+
+
+def get_table(table_name):
+    global _dynamodb
+    if _dynamodb is None:
+        _dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+    return _dynamodb.Table(table_name)
+
+
 def get_visitors(table):
     # Try to get the number of visitors
     response = table.get_item(
@@ -21,31 +32,26 @@ def get_visitors(table):
     return num_visitors
 
 
-def update_visitors(table, num_visitors):
-    #Update number of visitors
-    num_visitors += 1
-
-    # Update DynamoDB table
+def update_visitors(table):
+    # Atomically increment the number of visitors (ADD starts from 0 if not defined yet),
+    # so simultaneous visits are never lost
     response = table.update_item(
         Key = {'id': '0'},
-        UpdateExpression = 'SET visitors = :nv',
-        ExpressionAttributeValues = {':nv': num_visitors}
+        UpdateExpression = 'ADD visitors :one',
+        ExpressionAttributeValues = {':one': 1},
+        ReturnValues = 'UPDATED_NEW'
     )
-    
-    return num_visitors
+
+    return response['Attributes']['visitors']
 
 
 def lambda_handler(event, context, table_name=DYNAMODB_TABLE_NAME):
     try:
         # Select DynamoDB table
-        dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
-        table = dynamodb.Table(table_name)
+        table = get_table(table_name)
 
-        # Get current number of visitors from DynamoDB
-        num_visitors = get_visitors(table)
-
-        # Update the current number of visitors in DynamoDB
-        new_num_visitors = update_visitors(table, num_visitors)
+        # Increment the number of visitors in DynamoDB
+        new_num_visitors = update_visitors(table)
         
         return {
             'statusCode': 200,
