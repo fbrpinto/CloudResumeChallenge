@@ -188,6 +188,12 @@ resource "aws_apigatewayv2_stage" "stage" {
   api_id      = aws_apigatewayv2_api.apigw.id
   name        = "dev"
   auto_deploy = true
+
+  # Cap the request rate so a flood can't run up the bill (throttled requests aren't billed)
+  default_route_settings {
+    throttling_rate_limit  = 10
+    throttling_burst_limit = 20
+  }
 }
 
 
