@@ -54,3 +54,8 @@ variable "anomaly_threshold" {
   description = "Cost anomaly threshold in USD, shown in ntfy messages. Keep in sync with the account stack"
   default     = 5
 }
+
+variable "log_retention_days" {
+  description = "Days to keep Lambda logs"
+  default     = 14
+}

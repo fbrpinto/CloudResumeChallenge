@@ -86,8 +86,27 @@ import {
   id = "lambda_role/arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
 }
 
+# Let the function write logs (only Lambda's START/END/REPORT lines and errors: the code doesn't print)
+resource "aws_iam_role_policy_attachment" "lambda_logs" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Created by Lambda in 2024 with no retention
+import {
+  to = aws_cloudwatch_log_group.backend_lambda
+  id = "/aws/lambda/${var.backend_lambda_function_name}"
+}
+
+resource "aws_cloudwatch_log_group" "backend_lambda" {
+  name              = "/aws/lambda/${var.backend_lambda_function_name}"
+  retention_in_days = var.log_retention_days
+}
+
 # Create Backend Lambda function
 resource "aws_lambda_function" "backend_lambda" {
+  depends_on = [aws_cloudwatch_log_group.backend_lambda]
+
   filename      = data.archive_file.lambda_function_zip.output_path
   function_name = var.backend_lambda_function_name
   role          = aws_iam_role.lambda_role.arn
@@ -376,7 +395,7 @@ resource "aws_iam_role_policy_attachment" "lambda_notify_logs" {
 
 resource "aws_cloudwatch_log_group" "lambda_notify" {
   name              = "/aws/lambda/${var.notify_lambda_function_name}"
-  retention_in_days = 30
+  retention_in_days = var.log_retention_days
 }
 
 # Create Lambda function
