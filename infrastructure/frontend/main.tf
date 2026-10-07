@@ -151,6 +151,23 @@ resource "cloudflare_dns_record" "www" {
   proxied = false
 }
 
+# The domain sends no email: SPF allows no senders, DMARC tells receivers to reject spoofed mail
+resource "cloudflare_dns_record" "spf" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.domain_name
+  content = "\"v=spf1 -all\""
+  type    = "TXT"
+  ttl     = 1
+}
+
+resource "cloudflare_dns_record" "dmarc" {
+  zone_id = var.cloudflare_zone_id
+  name    = "_dmarc.${var.domain_name}"
+  content = "\"v=DMARC1; p=reject;\""
+  type    = "TXT"
+  ttl     = 1
+}
+
 #Create a CloudFront distribution
 resource "aws_cloudfront_distribution" "s3_dist" {
   depends_on = [aws_acm_certificate_validation.validation]

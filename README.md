@@ -22,7 +22,7 @@ This project is my solution for the [Cloud Resume Challenge](https://cloudresume
 ### 6. **Monitoring & Alerts**
 - CloudWatch is used to monitor Lambda execution metrics and errors.
 - Slack is configured for real-time alerts on any issues, including Lambda function errors.
-- PagerDuty is used for enhanced monitoring and alerting.
+- Email notifications are sent through SNS for the same alarms.
 
 ### 7. **Testing**
 - Unit and end-to-end tests are implemented using Cypress and Python’s unittest module. These ensure that the counter is updated correctly and that the Lambda function behaves as expected.

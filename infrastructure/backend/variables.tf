@@ -2,9 +2,10 @@ variable "slack_webhook" {
   description = "Webhook for Slack Integration"
 }
 
-variable "pagerduty_webhook" {
-  description = "Webhook for PagerDuty Integration"
-}
+# Disabled: PagerDuty no longer used
+# variable "pagerduty_webhook" {
+#   description = "Webhook for PagerDuty Integration"
+# }
 
 variable "notification_email" {
   description = "E-mail to send notification based on CloudWatch metrics"
