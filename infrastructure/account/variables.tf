@@ -8,6 +8,11 @@ variable "sns_topic_name" {
   default     = "crc-fbrpinto-sns-us-east-1-tf"
 }
 
+variable "monthly_budget" {
+  description = "Monthly spend in USD; emails at 50% and 100%, actual and forecast"
+  default     = "20"
+}
+
 variable "daily_budget" {
   description = "Daily spend in USD that triggers an email"
   default     = "1"

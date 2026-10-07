@@ -1,10 +1,7 @@
 # -------------------------------------- Account --------------------------------------- #
-# Account-wide cost guardrails: daily budget, cost anomaly alerts and the billing alarm.
+# Account-wide cost guardrails: budgets, cost anomaly alerts and the billing alarm.
 # Applied from a laptop after the backend stack (it uses the backend's us-east-1 SNS topic);
-# CI never touches this stack.
-#
-# The monthly budget that triggers the kill switch stays outside Terraform until the kill
-# switch is replaced.
+# CI never touches this stack. Alerts only: nothing here stops or deletes resources.
 terraform {
   backend "s3" {
     bucket       = "crc-fbrpinto-terraform-state"
@@ -37,6 +34,49 @@ data "aws_sns_topic" "alerts" {
 
 # --------------------------------------- Budgets -------------------------------------- #
 # Budgets without actions are free. Data refreshes a few times a day.
+import {
+  to = aws_budgets_budget.monthly
+  id = "${data.aws_caller_identity.current.account_id}:My Monthly Cost Budget"
+}
+
+resource "aws_budgets_budget" "monthly" {
+  name              = "My Monthly Cost Budget"
+  budget_type       = "COST"
+  limit_amount      = var.monthly_budget
+  limit_unit        = "USD"
+  time_unit         = "MONTHLY"
+  time_period_start = "2023-07-01_00:00"
+
+  cost_types {
+    include_credit = false
+    include_refund = false
+  }
+
+  dynamic "notification" {
+    for_each = toset(["ACTUAL", "FORECASTED"])
+
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 50
+      threshold_type             = "PERCENTAGE"
+      notification_type          = notification.value
+      subscriber_email_addresses = [var.notification_email]
+    }
+  }
+
+  dynamic "notification" {
+    for_each = toset(["ACTUAL", "FORECASTED"])
+
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 100
+      threshold_type             = "PERCENTAGE"
+      notification_type          = notification.value
+      subscriber_email_addresses = [var.notification_email]
+    }
+  }
+}
+
 resource "aws_budgets_budget" "daily" {
   name         = "crc-fbrpinto-daily-budget"
   budget_type  = "COST"
@@ -44,7 +84,6 @@ resource "aws_budgets_budget" "daily" {
   limit_unit   = "USD"
   time_unit    = "DAILY"
 
-  # Same cost types as the monthly budget
   cost_types {
     include_credit = false
     include_refund = false
