@@ -54,7 +54,7 @@ resource "aws_s3_bucket_public_access_block" "public_access_block" {
 
 # Attach a policy that specifies the access to the S3 bucket
 resource "aws_s3_bucket_policy" "public_access_policy" {
-  depends_on = [ aws_s3_bucket_public_access_block.public_access_block ]
+  depends_on = [aws_s3_bucket_public_access_block.public_access_block]
 
   bucket = aws_s3_bucket.website.id
   policy = jsonencode({
@@ -87,12 +87,12 @@ locals {
 # Uploads the Website fronend code to the s3 bucket
 resource "aws_s3_object" "frontend_files" {
   for_each = fileset("${path.module}/../../frontend/public", "**/*")
-  
-  bucket = aws_s3_bucket.website.bucket
-  key    = each.key
-  source = "${path.module}/../../frontend/public/${each.key}"
+
+  bucket       = aws_s3_bucket.website.bucket
+  key          = each.key
+  source       = "${path.module}/../../frontend/public/${each.key}"
   content_type = lookup(local.content_types, regex("\\.[^.]+$", each.value), null)
-  etag   = filemd5("${path.module}/../../frontend/public/${each.key}")
+  etag         = filemd5("${path.module}/../../frontend/public/${each.key}")
 }
 
 # ------------------------------------- CloudFront ------------------------------------- #
@@ -212,4 +212,162 @@ resource "aws_cloudfront_distribution" "s3_dist" {
   }
 
   aliases = [aws_acm_certificate.certificate.domain_name, "www.${aws_acm_certificate.certificate.domain_name}"]
+}
+
+# -------------------------------------------------------------------------------------- #
+# ------------------------------------- Monitoring ------------------------------------- #
+# -------------------------------------------------------------------------------------- #
+
+# Keeping this free: every alarm lists its metric directly (no metric math) and uses a period
+# of 60 s or more. Alarms under 60 s are high resolution and are billed from the first one.
+
+# The alerts topic and the API are created by the backend stack, which CI applies first
+data "aws_sns_topic" "alerts_us_east_1" {
+  provider = aws.us-east-1
+  name     = var.sns_topic_us_east_1_name
+}
+
+data "aws_apigatewayv2_apis" "api" {
+  name          = var.apigw_name
+  protocol_type = "HTTP"
+}
+
+locals {
+  cloudfront_dimensions = {
+    DistributionId = aws_cloudfront_distribution.s3_dist.id
+    Region         = "Global"
+  }
+}
+
+# ---------------------------------- CloudWatch Alarms --------------------------------- #
+# The description is the label sent to ntfy, so keep it short and free of names
+# CloudFront metrics only exist in us-east-1
+
+# Normal peak is about 1,000 requests per 5 minutes
+resource "aws_cloudwatch_metric_alarm" "cloudfront_requests" {
+  provider            = aws.us-east-1
+  alarm_name          = "crc-fbrpinto-cloudfront-requests"
+  alarm_description   = "Site requests per 5 min"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Requests"
+  namespace           = "AWS/CloudFront"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5000
+  treat_missing_data  = "notBreaching"
+  dimensions          = local.cloudfront_dimensions
+
+  alarm_actions = [data.aws_sns_topic.alerts_us_east_1.arn]
+  ok_actions    = [data.aws_sns_topic.alerts_us_east_1.arn]
+}
+
+# Data transfer is what CloudFront bills for; normal peak is a few MB per hour
+resource "aws_cloudwatch_metric_alarm" "cloudfront_bytes" {
+  provider            = aws.us-east-1
+  alarm_name          = "crc-fbrpinto-cloudfront-bytes"
+  alarm_description   = "Site bytes downloaded per hour"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "BytesDownloaded"
+  namespace           = "AWS/CloudFront"
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 1000000000
+  treat_missing_data  = "notBreaching"
+  dimensions          = local.cloudfront_dimensions
+
+  alarm_actions = [data.aws_sns_topic.alerts_us_east_1.arn]
+  ok_actions    = [data.aws_sns_topic.alerts_us_east_1.arn]
+}
+
+
+# ------------------------------------- Dashboard -------------------------------------- #
+# Free (up to 3 dashboards), as long as it is only viewed in the console
+resource "aws_cloudwatch_dashboard" "main" {
+  dashboard_name = "crc-fbrpinto"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type = "metric", x = 0, y = 0, width = 12, height = 6
+        properties = {
+          title  = "Counter Lambda"
+          region = "eu-west-1"
+          stat   = "Sum"
+          period = 300
+          metrics = [
+            ["AWS/Lambda", "Invocations", "FunctionName", var.backend_lambda_function_name],
+            ["AWS/Lambda", "Errors", "FunctionName", var.backend_lambda_function_name],
+          ]
+        }
+      },
+      {
+        type = "metric", x = 12, y = 0, width = 12, height = 6
+        properties = {
+          title  = "Counter Lambda duration (ms)"
+          region = "eu-west-1"
+          period = 300
+          metrics = [
+            ["AWS/Lambda", "Duration", "FunctionName", var.backend_lambda_function_name, { stat = "Average" }],
+            ["AWS/Lambda", "Duration", "FunctionName", var.backend_lambda_function_name, { stat = "Maximum" }],
+          ]
+        }
+      },
+      {
+        type = "metric", x = 0, y = 6, width = 12, height = 6
+        properties = {
+          title  = "API requests (4xx includes throttled 429s)"
+          region = "eu-west-1"
+          stat   = "Sum"
+          period = 300
+          metrics = [
+            ["AWS/ApiGateway", "Count", "ApiId", one(data.aws_apigatewayv2_apis.api.ids), "Stage", "dev"],
+            ["AWS/ApiGateway", "4xx", "ApiId", one(data.aws_apigatewayv2_apis.api.ids), "Stage", "dev"],
+            ["AWS/ApiGateway", "5xx", "ApiId", one(data.aws_apigatewayv2_apis.api.ids), "Stage", "dev"],
+          ]
+          annotations = { horizontal = [{ label = "Alarm", value = 1000 }] }
+        }
+      },
+      {
+        type = "metric", x = 12, y = 6, width = 12, height = 6
+        properties = {
+          title  = "Site requests"
+          region = "us-east-1"
+          stat   = "Sum"
+          period = 300
+          metrics = [
+            ["AWS/CloudFront", "Requests", "DistributionId", aws_cloudfront_distribution.s3_dist.id, "Region", "Global"],
+          ]
+          annotations = { horizontal = [{ label = "Alarm", value = 5000 }] }
+        }
+      },
+      {
+        type = "metric", x = 0, y = 12, width = 12, height = 6
+        properties = {
+          title  = "Site bytes downloaded per hour"
+          region = "us-east-1"
+          stat   = "Sum"
+          period = 3600
+          metrics = [
+            ["AWS/CloudFront", "BytesDownloaded", "DistributionId", aws_cloudfront_distribution.s3_dist.id, "Region", "Global"],
+          ]
+          annotations = { horizontal = [{ label = "Alarm", value = 1000000000 }] }
+        }
+      },
+      {
+        type = "metric", x = 12, y = 12, width = 12, height = 6
+        properties = {
+          title  = "Estimated bill this month (USD)"
+          region = "us-east-1"
+          stat   = "Maximum"
+          period = 21600
+          metrics = [
+            ["AWS/Billing", "EstimatedCharges", "Currency", "USD"],
+          ]
+          annotations = { horizontal = [{ label = "Alarm", value = 5 }] }
+        }
+      },
+    ]
+  })
 }

@@ -20,6 +20,12 @@ provider "aws" {
   region = "eu-west-1"
 }
 
+# CloudFront and billing metrics, and cost anomaly alerts, only exist in us-east-1
+provider "aws" {
+  region = "us-east-1"
+  alias  = "us-east-1"
+}
+
 # Reads the API token from the CLOUDFLARE_API_TOKEN environment variable
 provider "cloudflare" {}
 
@@ -205,17 +211,100 @@ resource "aws_apigatewayv2_stage" "stage" {
 # ------------------------------------- Monitoring ------------------------------------- #
 # -------------------------------------------------------------------------------------- #
 
-# ------------------------------------- SNS Topic -------------------------------------- #
-# Create an SNS Topic
+# Keeping this free: every alarm lists its metric directly (no metric math) and uses a period
+# of 60 s or more. Alarms under 60 s are high resolution and are billed from the first one.
+# The free tier covers 10 standard alarms per account; this repo uses 5.
+
+# ------------------------------------- SNS Topics ------------------------------------- #
+# Alerts for metrics in eu-west-1 (Lambda, API Gateway)
 resource "aws_sns_topic" "sns_topic" {
   name = var.sns_topic_name
 }
 
+# Alerts for metrics that only exist in us-east-1 (CloudFront, billing) and for cost anomalies
+resource "aws_sns_topic" "alerts_us_east_1" {
+  provider = aws.us-east-1
+  name     = var.sns_topic_us_east_1_name
+}
 
-# --------------------------------- CloudWatch Metric ---------------------------------- #
-# Define a metric (Backend Lambda function invocation) to watch
+# CloudWatch alarms and Cost Anomaly Detection may publish to the us-east-1 topic
+data "aws_iam_policy_document" "alerts_us_east_1" {
+  statement {
+    sid       = "AccountOwner"
+    actions   = ["SNS:Publish", "SNS:Subscribe", "SNS:GetTopicAttributes", "SNS:SetTopicAttributes"]
+    resources = [aws_sns_topic.alerts_us_east_1.arn]
+
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceOwner"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+
+  statement {
+    sid       = "AlertServices"
+    actions   = ["SNS:Publish"]
+    resources = [aws_sns_topic.alerts_us_east_1.arn]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com", "costalerts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "alerts_us_east_1" {
+  provider = aws.us-east-1
+  arn      = aws_sns_topic.alerts_us_east_1.arn
+  policy   = data.aws_iam_policy_document.alerts_us_east_1.json
+}
+
+data "aws_caller_identity" "current" {}
+
+# Email and ntfy receive every alert from both topics
+resource "aws_sns_topic_subscription" "email_subscription" {
+  topic_arn = aws_sns_topic.sns_topic.arn
+  protocol  = "email"
+  endpoint  = var.notification_email
+}
+
+resource "aws_sns_topic_subscription" "email_subscription_us_east_1" {
+  provider  = aws.us-east-1
+  topic_arn = aws_sns_topic.alerts_us_east_1.arn
+  protocol  = "email"
+  endpoint  = var.notification_email
+}
+
+resource "aws_sns_topic_subscription" "notify_subscription" {
+  topic_arn = aws_sns_topic.sns_topic.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.notify_lambda.arn
+}
+
+resource "aws_sns_topic_subscription" "notify_subscription_us_east_1" {
+  provider  = aws.us-east-1
+  topic_arn = aws_sns_topic.alerts_us_east_1.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.notify_lambda.arn
+}
+
+
+# ---------------------------------- CloudWatch Alarms --------------------------------- #
+# The description is the label sent to ntfy, so keep it short and free of names
 resource "aws_cloudwatch_metric_alarm" "cloud_watch_alarm" {
   alarm_name          = var.cloud_watch_metric_name
+  alarm_description   = "Counter Lambda calls per minute"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   datapoints_to_alarm = 1
@@ -224,48 +313,50 @@ resource "aws_cloudwatch_metric_alarm" "cloud_watch_alarm" {
   period              = 60
   statistic           = "SampleCount"
   threshold           = 15000
+  treat_missing_data  = "notBreaching"
 
   dimensions = {
     FunctionName = aws_lambda_function.backend_lambda.function_name
   }
 
-  alarm_description = "Alarm when Lambda function has too many invocations"
-  alarm_actions     = [aws_sns_topic.sns_topic.arn]
-  ok_actions        = [aws_sns_topic.sns_topic.arn]
+  alarm_actions = [aws_sns_topic.sns_topic.arn]
+  ok_actions    = [aws_sns_topic.sns_topic.arn]
 }
 
-# Subscribe an email address to the SNS topic
-resource "aws_sns_topic_subscription" "email_subscription" {
-  topic_arn = aws_sns_topic.sns_topic.arn
-  protocol  = "email"
-  endpoint  = var.notification_email
+# Normal peak is a few hundred requests per 5 minutes
+resource "aws_cloudwatch_metric_alarm" "api_requests" {
+  alarm_name          = "crc-fbrpinto-api-requests"
+  alarm_description   = "API requests per 5 min"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Count"
+  namespace           = "AWS/ApiGateway"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1000
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ApiId = aws_apigatewayv2_api.apigw.id
+    Stage = aws_apigatewayv2_stage.stage.name
+  }
+
+  alarm_actions = [aws_sns_topic.sns_topic.arn]
+  ok_actions    = [aws_sns_topic.sns_topic.arn]
 }
 
-# Subscribe PagerDuty webhook URL to the SNS topic (disabled: PagerDuty no longer used)
-# resource "aws_sns_topic_subscription" "pagerduty_subscription" {
-#   topic_arn = aws_sns_topic.sns_topic.arn
-#   protocol  = "https"
-#   endpoint  = var.pagerduty_webhook
-# }
 
-# Subscribe Lambda Function (to integrate with Slack) to the SNS topic
-resource "aws_sns_topic_subscription" "lambda_subscription" {
-  topic_arn = aws_sns_topic.sns_topic.arn
-  protocol  = "lambda"
-  endpoint  = aws_lambda_function.slack_lambda.arn
-}
-
-# ------------------------ Lambda function (Slack Integration) ------------------------- #
+# ------------------------- Lambda function (ntfy notifications) ------------------------ #
 # Add the lambda function code to a .zip file
-data "archive_file" "lambda_function_slack_zip" {
+data "archive_file" "lambda_function_notify_zip" {
   type        = "zip"
-  output_path = "${path.module}/lambda_functions/lambda_function_slack.zip"
-  source_file = "${path.module}/lambda_functions/slack/lambda_function.py"
+  output_path = "${path.module}/lambda_functions/lambda_function_notify.zip"
+  source_file = "${path.module}/lambda_functions/notify/lambda_function.py"
 }
 
 # Define IAM role for Lambda function
-resource "aws_iam_role" "lambda_slack_role" {
-  name = "lambda-slack-role"
+resource "aws_iam_role" "lambda_notify_role" {
+  name = "lambda-notify-role"
 
   assume_role_policy = jsonencode({
     "Version" : "2012-10-17",
@@ -277,26 +368,50 @@ resource "aws_iam_role" "lambda_slack_role" {
   })
 }
 
+# Let the function write logs, so failed deliveries are visible
+resource "aws_iam_role_policy_attachment" "lambda_notify_logs" {
+  role       = aws_iam_role.lambda_notify_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_cloudwatch_log_group" "lambda_notify" {
+  name              = "/aws/lambda/${var.notify_lambda_function_name}"
+  retention_in_days = 30
+}
+
 # Create Lambda function
-resource "aws_lambda_function" "slack_lambda" {
-  filename      = data.archive_file.lambda_function_slack_zip.output_path
-  function_name = var.slack_lambda_function_name
-  role          = aws_iam_role.lambda_slack_role.arn
-  handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.14"
+resource "aws_lambda_function" "notify_lambda" {
+  depends_on = [aws_cloudwatch_log_group.lambda_notify]
+
+  filename         = data.archive_file.lambda_function_notify_zip.output_path
+  source_code_hash = data.archive_file.lambda_function_notify_zip.output_base64sha256
+  function_name    = var.notify_lambda_function_name
+  role             = aws_iam_role.lambda_notify_role.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.14"
+  timeout          = 15
 
   environment {
     variables = {
-      SLACK_WEBHOOK = var.slack_webhook
+      NTFY_TOPIC        = var.ntfy_topic
+      ANOMALY_THRESHOLD = var.anomaly_threshold
     }
   }
 }
 
-# Allow SNS to invoke Lambda function
+# Allow both SNS topics to invoke Lambda function
 resource "aws_lambda_permission" "allow_sns_to_invoke_lambda" {
   statement_id  = "AllowSNSInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.slack_lambda.function_name
+  function_name = aws_lambda_function.notify_lambda.function_name
   principal     = "sns.amazonaws.com"
   source_arn    = aws_sns_topic.sns_topic.arn
+}
+
+resource "aws_lambda_permission" "allow_sns_us_east_1_to_invoke_lambda" {
+  statement_id  = "AllowSNSInvokeUsEast1"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.notify_lambda.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.alerts_us_east_1.arn
 }
